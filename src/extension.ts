@@ -1,39 +1,48 @@
-require("dotenv").config();
 import * as vscode from "vscode";
 import { MongoClient } from "mongodb";
+require("dotenv").config();
 
 let startTime: Date;
-const mongoUri = process.env.MONGODB_URI; // MongoDB URI
-const dbName = "vsCodeUsageDB"; // Database name
-const collectionName = "usage_log"; // Collection name
+let hasLogged = false;
+
+const mongoUri = process.env.MONGO_URI;
+const dbName = "vsCodeUsageDB"; 
+const collectionName = "usage_log";
 
 export async function activate(context: vscode.ExtensionContext) {
-  console.log('Extension "vs-code-usage-tracker" is now active! this 	running?');
+  console.log('Extension "vs-code-usage-tracker" is now active!');
 
-  // Record the start time when VS Code is opened
+  
   startTime = new Date();
   console.log(`VS Code opened at: ${startTime}`);
 
-  // Log when files are opened
+  
   context.subscriptions.push(
     vscode.workspace.onDidOpenTextDocument((doc) => {
       console.log(`Opened file: ${doc.uri.fsPath}`);
     })
   );
 
-  // Add cleanup when VS Code or the extension is deactivated
+  
   context.subscriptions.push({
     dispose: async () => {
-      await logUsageToMongo();
+      if (!hasLogged) {
+        await logUsageToMongo();
+        hasLogged = true; 
+      }
     },
   });
 }
 
 export async function deactivate() {
   console.log('Extension "vs-code-usage-tracker" is deactivated.');
+  console.log(`VS Code closed at: ${new Date()}`);
 
-  // Log usage data before deactivation
-  await logUsageToMongo();
+  
+  if (!hasLogged) {
+    await logUsageToMongo();
+    hasLogged = true;
+  }
 }
 
 async function logUsageToMongo() {
@@ -51,12 +60,18 @@ async function logUsageToMongo() {
       start_time: startTime,
       end_time: endTime,
       duration_seconds: duration,
-      date: startTime.toISOString().split("T")[0], // Storing only the date part (YYYY-MM-DD)
+      date: startTime.toISOString().split("T")[0], 
     };
 
-    await collection.insertOne(logEntry);
 
-    console.log(`Logged usage to MongoDB:`, logEntry);
+    const existingEntry = await collection.findOne({ date: logEntry.date, start_time: logEntry.start_time });
+    if (!existingEntry) {
+      await collection.insertOne(logEntry);
+      console.log(`Logged usage to MongoDB:`, logEntry);
+    } else {
+      console.log("Duplicate log entry detected and not inserted.");
+    }
+
     await client.close();
   } catch (err) {
     console.error("Error logging usage to MongoDB:", err);
