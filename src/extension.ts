@@ -1,26 +1,69 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
-import * as vscode from 'vscode';
+import * as vscode from "vscode";
+import { MongoClient } from "mongodb";
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
-export function activate(context: vscode.ExtensionContext) {
+let startTime: Date;
+const mongoUri = "mongodb://localhost:27017"; // Replace with your MongoDB URI
+const dbName = "vsCodeUsageDB"; // Database name
+const collectionName = "usage_log"; // Collection name
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "kode-trak" is now active!');
+export async function activate(context: vscode.ExtensionContext) {
+  console.log('Extension "vs-code-usage-tracker" is now active!');
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	const disposable = vscode.commands.registerCommand('kode-trak.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from kode-trak!');
-	});
+  // Record the start time when VS Code is opened
+  startTime = new Date();
+  console.log(`VS Code opened at: ${startTime}`);
 
-	context.subscriptions.push(disposable);
+  // When a file is opened, log the time
+  vscode.workspace.onDidOpenTextDocument((doc) => {
+    console.log(`Opened file: ${doc.uri.fsPath}`);
+  });
+
+  // When the extension is deactivated (VS Code is closing)
+  context.subscriptions.push(
+    vscode.workspace.onDidCloseTextDocument((doc) => {
+      const endTime = new Date();
+      console.log(`VS Code closed at: ${endTime}`);
+
+      // Calculate usage time in seconds
+      const duration = (endTime.getTime() - startTime.getTime()) / 1000;
+
+      // Log to MongoDB
+      logUsageToMongo(startTime, endTime, duration);
+    })
+  );
 }
 
-// This method is called when your extension is deactivated
-export function deactivate() {}
+export function deactivate() {
+  console.log('Extension "vs-code-usage-tracker" is deactivated.');
+}
+
+async function logUsageToMongo(
+  startTime: Date,
+  endTime: Date,
+  duration: number
+) {
+  try {
+    const client = new MongoClient(mongoUri, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    await client.connect();
+
+    const db = client.db(dbName);
+    const collection = db.collection(collectionName);
+
+    const logEntry = {
+      start_time: startTime,
+      end_time: endTime,
+      duration_seconds: duration,
+      date: startTime.toISOString().split("T")[0], // Storing only the date part (YYYY-MM-DD)
+    };
+
+    await collection.insertOne(logEntry);
+
+    console.log(`Logged usage: ${logEntry}`);
+    await client.close();
+  } catch (err) {
+    console.error("Error logging usage to MongoDB:", err);
+  }
+}
