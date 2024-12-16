@@ -1,52 +1,47 @@
+require("dotenv").config();
 import * as vscode from "vscode";
 import { MongoClient } from "mongodb";
 
 let startTime: Date;
-const mongoUri = "mongodb://localhost:27017"; // Replace with your MongoDB URI
+const mongoUri = process.env.MONGODB_URI; // MongoDB URI
 const dbName = "vsCodeUsageDB"; // Database name
 const collectionName = "usage_log"; // Collection name
 
 export async function activate(context: vscode.ExtensionContext) {
-  console.log('Extension "vs-code-usage-tracker" is now active!');
+  console.log('Extension "vs-code-usage-tracker" is now active! this 	running?');
 
   // Record the start time when VS Code is opened
   startTime = new Date();
   console.log(`VS Code opened at: ${startTime}`);
 
-  // When a file is opened, log the time
-  vscode.workspace.onDidOpenTextDocument((doc) => {
-    console.log(`Opened file: ${doc.uri.fsPath}`);
-  });
-
-  // When the extension is deactivated (VS Code is closing)
+  // Log when files are opened
   context.subscriptions.push(
-    vscode.workspace.onDidCloseTextDocument((doc) => {
-      const endTime = new Date();
-      console.log(`VS Code closed at: ${endTime}`);
-
-      // Calculate usage time in seconds
-      const duration = (endTime.getTime() - startTime.getTime()) / 1000;
-
-      // Log to MongoDB
-      logUsageToMongo(startTime, endTime, duration);
+    vscode.workspace.onDidOpenTextDocument((doc) => {
+      console.log(`Opened file: ${doc.uri.fsPath}`);
     })
   );
+
+  // Add cleanup when VS Code or the extension is deactivated
+  context.subscriptions.push({
+    dispose: async () => {
+      await logUsageToMongo();
+    },
+  });
 }
 
-export function deactivate() {
+export async function deactivate() {
   console.log('Extension "vs-code-usage-tracker" is deactivated.');
+
+  // Log usage data before deactivation
+  await logUsageToMongo();
 }
 
-async function logUsageToMongo(
-  startTime: Date,
-  endTime: Date,
-  duration: number
-) {
+async function logUsageToMongo() {
   try {
-    const client = new MongoClient(mongoUri, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
+    const endTime = new Date();
+    const duration = (endTime.getTime() - startTime.getTime()) / 1000;
+
+    const client = new MongoClient(mongoUri);
     await client.connect();
 
     const db = client.db(dbName);
@@ -61,7 +56,7 @@ async function logUsageToMongo(
 
     await collection.insertOne(logEntry);
 
-    console.log(`Logged usage: ${logEntry}`);
+    console.log(`Logged usage to MongoDB:`, logEntry);
     await client.close();
   } catch (err) {
     console.error("Error logging usage to MongoDB:", err);
