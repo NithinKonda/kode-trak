@@ -2,15 +2,15 @@ import * as vscode from "vscode";
 import { MongoClient } from "mongodb";
 require("dotenv").config();
 
-const mongoUri = process.env.MONGO_URI 
+const mongoUri = process.env.MONGO_URI
 
 const dbName = process.env.DB_NAME || "vsCodeUsageDB";
-const usageCollectionName = "usage_log"; // Collection for app usage
-const fileExtensionCollectionName = "file_extension_time"; // Collection for file extensions and their durations
-const activityCollectionName = "file_activity_log"; // Collection for file activity (lines of code and word count)
+const usageCollectionName = "usage_log"; 
+const fileExtensionCollectionName = "file_extension_time"; 
+const activityCollectionName = "file_activity_log"; 
 
 let startTime: Date | null = null;
-let fileStartTimes: Map<string, Date> = new Map(); // To track file open times
+let fileStartTimes: Map<string, Date> = new Map(); 
 let linesAdded: number = 0;
 let linesDeleted: number = 0;
 let wordsAdded: number = 0;
@@ -19,11 +19,13 @@ let hasLogged = false;
 
 export async function activate(context: vscode.ExtensionContext) {
     console.log('Extension "vs-code-usage-tracker" is now active!');
+    
+    
 
     startTime = new Date();
     console.log(`VS Code opened at: ${startTime}`);
 
-    // Track file open times
+
     context.subscriptions.push(
         vscode.workspace.onDidOpenTextDocument((doc) => {
             const extension = getFileExtension(doc.fileName);
@@ -34,7 +36,6 @@ export async function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // Track file close times and log durations
     context.subscriptions.push(
         vscode.workspace.onDidCloseTextDocument((doc) => {
             const extension = getFileExtension(doc.fileName);
@@ -45,27 +46,25 @@ export async function activate(context: vscode.ExtensionContext) {
                     const duration = (endTime.getTime() - startTime.getTime()) / 1000;
                     console.log(`Closed file: ${doc.fileName} (Extension: ${extension}), Duration: ${duration} seconds`);
 
-                    fileStartTimes.delete(extension); // Remove tracked file
+                    fileStartTimes.delete(extension);
                     logFileExtensionTimeToMongo(extension, duration);
                 }
             }
         })
     );
 
-    // Track text changes (lines added, deleted, words added, deleted)
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument((event) => {
             const document = event.document;
             const changes = event.contentChanges;
 
             changes.forEach((change) => {
-                // Count lines added and deleted
+
                 const addedLines = (change.text.match(/\n/g) || []).length;
                 const deletedLines = (change.rangeLength > 0) ? (change.rangeLength - change.text.length) / 2 : 0;
                 linesAdded += addedLines;
                 linesDeleted += deletedLines;
 
-                // Count words added and deleted
                 const addedWords = (change.text.match(/\w+/g) || []).length;
                 const deletedWords = (change.rangeLength > 0) ? (change.text.split(/\s+/).length - change.text.replace(/\s+/g, "").length) : 0;
                 wordsAdded += addedWords;
@@ -77,7 +76,7 @@ export async function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // Handle extension deactivation
+
     context.subscriptions.push({
         dispose: async () => {
             if (!hasLogged) {
@@ -101,7 +100,7 @@ export async function deactivate() {
 }
 
 async function logUsageToMongo() {
-    if (!mongoUri) return; // Skip logging if no MongoDB URI is provided
+    if (!mongoUri) return; 
 
     try {
         const endTime = new Date();
@@ -118,7 +117,7 @@ async function logUsageToMongo() {
             start_time: startTime,
             end_time: endTime,
             duration_seconds: duration,
-            date: startTime?.toISOString().split("T")[0], // Storing only the date part (YYYY-MM-DD)
+            date: startTime?.toISOString().split("T")[0],
         };
 
         if (startTime) {
@@ -142,7 +141,7 @@ async function logUsageToMongo() {
 }
 
 async function logFileExtensionTimeToMongo(extension: string, duration: number) {
-    if (!mongoUri) return; // Skip logging if no MongoDB URI is provided
+    if (!mongoUri) return;
 
     try {
         const client = new MongoClient(mongoUri);
@@ -155,7 +154,7 @@ async function logFileExtensionTimeToMongo(extension: string, duration: number) 
         const existingEntry = await collection.findOne({ extension });
 
         if (existingEntry) {
-            // Update the duration if the entry exists
+          
             await collection.updateOne(
                 { extension },
                 { $inc: { total_duration_seconds: duration } }
@@ -164,7 +163,7 @@ async function logFileExtensionTimeToMongo(extension: string, duration: number) 
                 `Updated duration for extension "${extension}" by ${duration} seconds.`
             );
         } else {
-            // Create a new entry if it doesn't exist
+
             await collection.insertOne({
                 extension,
                 total_duration_seconds: duration,
@@ -182,7 +181,7 @@ async function logFileExtensionTimeToMongo(extension: string, duration: number) 
 }
 
 async function logFileActivityToMongo() {
-    if (!mongoUri) return; // Skip logging if no MongoDB URI is provided
+    if (!mongoUri) return;
 
     try {
         const client = new MongoClient(mongoUri);
@@ -197,10 +196,9 @@ async function logFileActivityToMongo() {
             linesDeleted,
             wordsAdded,
             wordsDeleted,
-            date: new Date().toISOString().split("T")[0], // Store the date (YYYY-MM-DD)
+            date: new Date().toISOString().split("T")[0],
         };
 
-        // Increment or insert the activity data
         await collection.updateOne(
             { date: activityEntry.date },
             { $inc: { linesAdded, linesDeleted, wordsAdded, wordsDeleted } },
