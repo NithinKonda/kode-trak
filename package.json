@@ -4,6 +4,7 @@
   "displayName": "kode-trak",
   "description": "",
   "version": "0.0.1",
+  "icon": "src/logo.png",
   "engines": {
     "vscode": "^1.96.0"
   },
